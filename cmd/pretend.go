@@ -9,12 +9,13 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"runtime"
 	"time"
 )
 
 var (
 	AttackInterval = 1
-	Device         = "en2"
+	Device         = "e"
 )
 
 var pretendCmd = &cobra.Command{
@@ -31,9 +32,14 @@ var pretendCmd = &cobra.Command{
 		if t == nil || f == nil {
 			log.Fatal("IP Pars Failld")
 		}
+		_, err := net.InterfaceByName(Device)
+		if err != nil {
+			log.Fatalf("接口%s不存在", Device)
+		}
+		// 目标MAC地址查询
 		tAddr, err := arp.Lookup(t)
 		if err != nil {
-			log.Fatal("目标不存在", err)
+			log.Fatalf("目标 %s 不存在 ", t.To4().String())
 		}
 		// 伪装的Address 需要搭配任意的IP和自己的Mac地址
 		fakeAddr := &arp.Address{
@@ -46,8 +52,8 @@ var pretendCmd = &cobra.Command{
 }
 
 func init() {
-	pretendCmd.LocalFlags().StringVar(&Device, "device", "en2", "选择要使用的网卡")
-	pretendCmd.MarkFlagRequired("device")
+	pretendCmd.PersistentFlags().StringVarP(&Device, "interface", "i", "", "选择要使用的网卡")
+	SetDefaultInterface()
 }
 
 func ActiveSpoof(target *arp.Address, fake *arp.Address) {
@@ -97,4 +103,17 @@ func RecoverARP(target *arp.Address, fake *arp.Address) {
 		fmt.Printf("[RECOVER] ARP Reply told %s,%s => %s\n", target.IP.String(), fake.IP.String(), fake.HardwareAddr.String())
 	}
 
+}
+
+func SetDefaultInterface() {
+	if Device == "" {
+		switch runtime.GOOS {
+		case "windows":
+			Device = "Ethernet"
+		case "darwin":
+			Device = "en0"
+		case "linux":
+			Device = "eth0"
+		}
+	}
 }
